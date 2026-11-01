@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>等角投影 ブロック アート</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-3">
+<div class="max-w-2xl mx-auto">
+  <h1 class="text-xl font-bold text-center text-cyan-300 mb-1">🧊 等角投影 ブロック アート</h1>
+  <p class="text-center text-gray-400 text-xs mb-3">グリッドをクリックしてブロックを追加・削除</p>
+
+  <div class="flex flex-wrap gap-2 justify-center mb-3">
+    <div class="flex gap-1 items-center text-xs">
+      テーマ:
+      <button onclick="setTheme(0)" class="px-2 py-1 rounded text-xs bg-blue-900 border-2" id="t0" aria-label="テーマ1">海</button>
+      <button onclick="setTheme(1)" class="px-2 py-1 rounded text-xs bg-gray-700" id="t1" aria-label="テーマ2">森</button>
+      <button onclick="setTheme(2)" class="px-2 py-1 rounded text-xs bg-gray-700" id="t2" aria-label="テーマ3">夕焼け</button>
+      <button onclick="setTheme(3)" class="px-2 py-1 rounded text-xs bg-gray-700" id="t3" aria-label="テーマ4">岩</button>
+      <button onclick="setTheme(4)" class="px-2 py-1 rounded text-xs bg-gray-700" id="t4" aria-label="テーマ5">金</button>
+    </div>
+    <button onclick="clearAll()" class="bg-red-900 hover:bg-red-800 px-3 py-1 rounded text-xs" aria-label="全消去">🗑 全消去</button>
+    <button onclick="randomize()" class="bg-purple-900 hover:bg-purple-800 px-3 py-1 rounded text-xs" aria-label="ランダム">🎲 ランダム</button>
+    <button onclick="savePng()" class="bg-green-900 hover:bg-green-800 px-3 py-1 rounded text-xs" aria-label="PNG保存">💾 PNG保存</button>
+  </div>
+
+  <canvas id="isoCanvas" class="block mx-auto rounded-lg border border-gray-700 cursor-pointer"
+    width="500" height="480" aria-label="等角投影ブロックキャンバス"></canvas>
+
+  <div class="text-center text-xs text-gray-500 mt-2">ブロック数: <span id="blockCount" class="text-cyan-400">0</span></div>
+</div>
+
+<script>
+const canvas = document.getElementById('isoCanvas');
+const ctx = canvas.getContext('2d');
+const GRID = 10;
+
+const themes = [
+  { top:'#5bb8f5', left:'#2a6db5', right:'#1a4d8a', bg:'#0d1b2a' }, // 海
+  { top:'#6dbe6d', left:'#2d7a2d', right:'#1a4d1a', bg:'#0a1a0a' }, // 森
+  { top:'#f5a35b', left:'#b56a2a', right:'#8a4515', bg:'#1a0d05' }, // 夕焼け
+  { top:'#a0a0a0', left:'#606060', right:'#404040', bg:'#1a1a1a' }, // 岩
+  { top:'#f5d65b', left:'#b59a2a', right:'#8a7015', bg:'#1a1500' }, // 金
+];
+let theme = 0;
+let blocks = [];
+
+// Initialize empty 10x10 grid
+for(let y=0;y<GRID;y++) blocks[y]=new Array(GRID).fill(false);
+
+// Isometric projection helpers
+const CW = 28, CH = 14, BLOCK_H = 16;
+const originX = canvas.width/2, originY = 80;
+
+function isoPoint(gx, gy) {
+  return {
+    x: originX + (gx - gy) * CW,
+    y: originY + (gx + gy) * CH
+  };
+}
+
+function drawFace(pts, color) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+}
+
+function drawCube(gx, gy) {
+  const t = themes[theme];
+  // Get four corners of the top face in iso coordinates
+  const tl = isoPoint(gx, gy);
+  const tr = isoPoint(gx+1, gy);
+  const br = isoPoint(gx+1, gy+1);
+  const bl = isoPoint(gx, gy+1);
+
+  // Top face
+  drawFace([tl, tr, br, bl], t.top);
+  // Left face
+  const llb = {x:bl.x, y:bl.y+BLOCK_H};
+  const llt = bl;
+  const lrt = tl;
+  const lrb = {x:tl.x, y:tl.y+BLOCK_H};
+  drawFace([llt, lrt, lrb, llb], t.left);
+  // Right face
+  const rlt = tr;
+  const rlb = {x:tr.x, y:tr.y+BLOCK_H};
+  const rrb = {x:br.x, y:br.y+BLOCK_H};
+  const rrt = br;
+  drawFace([rlt, rrt, rrb, rlb], t.right);
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = themes[theme].bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw grid hint (ghost squares)
+  for(let y=GRID-1;y>=0;y--){
+    for(let x=0;x<GRID;x++){
+      const tl=isoPoint(x,y),tr=isoPoint(x+1,y),br=isoPoint(x+1,y+1),bl=isoPoint(x,y+1);
+      ctx.beginPath();
+      ctx.moveTo(tl.x,tl.y); ctx.lineTo(tr.x,tr.y); ctx.lineTo(br.x,br.y); ctx.lineTo(bl.x,bl.y);
+      ctx.closePath();
+      ctx.strokeStyle='rgba(255,255,255,0.05)';
+      ctx.lineWidth=0.5;
+      ctx.stroke();
+    }
+  }
+
+  // Draw blocks back-to-front (painter's algorithm)
+  for(let y=GRID-1;y>=0;y--){
+    for(let x=0;x<GRID;x++){
+      if(blocks[y][x]) drawCube(x, y);
+    }
+  }
+
+  // Block count
+  const cnt = blocks.flat().filter(Boolean).length;
+  document.getElementById('blockCount').textContent = cnt;
+}
+
+function gridHitTest(mx, my) {
+  // Inverse isometric
+  const relX = mx - originX, relY = my - originY;
+  // Iso to grid: gx = (relX/CW + relY/CH) / 2, gy = (relY/CH - relX/CW) / 2
+  const gx = Math.floor((relX/CW + relY/CH) / 2);
+  const gy = Math.floor((relY/CH - relX/CW) / 2);
+  return {gx, gy};
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width/rect.width, scaleY = canvas.height/rect.height;
+  const mx = (e.clientX-rect.left)*scaleX;
+  const my = (e.clientY-rect.top)*scaleY;
+  const {gx, gy} = gridHitTest(mx, my);
+  if(gx>=0&&gx<GRID&&gy>=0&&gy<GRID){
+    blocks[gy][gx] = !blocks[gy][gx];
+    render();
+  }
+});
+
+function setTheme(idx) {
+  theme = idx;
+  document.querySelectorAll('[id^="t"]').forEach((b,i)=>{
+    b.className = `px-2 py-1 rounded text-xs ${i===idx?'bg-blue-900 border-2 border-blue-400':'bg-gray-700'}`;
+  });
+  render();
+}
+
+function clearAll() {
+  for(let y=0;y<GRID;y++) blocks[y]=new Array(GRID).fill(false);
+  render();
+}
+
+function randomize() {
+  for(let y=0;y<GRID;y++) for(let x=0;x<GRID;x++) blocks[y][x]=Math.random()<0.4;
+  render();
+}
+
+function savePng() {
+  const link = document.createElement('a');
+  link.download = 'isometric-art.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+render();
+</script>
+</body>
+</html>
